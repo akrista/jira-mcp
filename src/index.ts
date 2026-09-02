@@ -604,9 +604,12 @@ async function searchJiraTickets(
   data: JiraSearchResponse;
   errorMessage?: string;
 }> {
+  const fields = "summary,status,priority,issuetype,description";
   const jiraUrl = `https://${
     process.env.JIRA_HOST
-  }/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}`;
+  }/rest/api/3/search/jql?jql=${encodeURIComponent(
+    jql
+  )}&maxResults=${maxResults}&fields=${fields}`;
 
   console.log("JIRA Search URL:", jiraUrl);
   console.log("JIRA Search JQL:", jql);
