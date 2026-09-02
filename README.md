@@ -38,6 +38,10 @@ The JIRA MCP project is a Node.js/TypeScript application that provides a Model C
   - [link-tickets](#link-tickets)
   - [get-test-steps](#get-test-steps)
   - [add-test-steps](#add-test-steps)
+  - [create-project](#create-project)
+  - [create-issue-type](#create-issue-type)
+  - [create-issuetype-scheme](#create-issuetype-scheme)
+  - [assign-issuetype-scheme](#assign-issuetype-scheme)
 - [Project Architecture](#project-architecture)
 - [Core Components](#core-components)
 - [Authentication](#authentication)
@@ -61,6 +65,7 @@ The JIRA MCP project is a Node.js/TypeScript application that provides a Model C
 - Update existing JIRA tickets with new field values
 - Link JIRA tickets together with specified relationship types
 - Retrieve and add test steps for Zephyr test tickets
+- Create JIRA projects, custom global issue types, and issue type schemes (admin permissions required)
 - Seamless integration with Claude desktop application
 - Simple configuration using Claude's desktop configuration file
 
@@ -412,6 +417,92 @@ Adds test steps to a test ticket via the Zephyr integration.
 ```
 
 This tool requires Zephyr for Jira Cloud to be installed and configured. You'll need to set the Zephyr API environment variables in your configuration file.
+
+### create-project
+
+Creates a new JIRA project. **Requires "Administer Jira" global permission** on the account behind `JIRA_API_TOKEN` — this creates a real, shared project on your Jira site.
+
+**Parameters:**
+
+- `key`: The project key (required, 2-10 uppercase letters/digits starting with a letter, e.g. "DBSAN")
+- `name`: The project name (required)
+- `project_type_key`: `software`, `business`, or `service_desk` (required)
+- `project_template_key`: The Jira project template key, must match `project_type_key` (required — if unsure, open Project Settings on an existing project of the desired type in the Jira UI, or check Atlassian's REST API docs for valid template keys)
+- `description`: Project description (optional)
+- `lead_account_id`: Atlassian accountId of the project lead (optional)
+- `assignee_type`: `PROJECT_LEAD` or `UNASSIGNED` (optional)
+- `url`: Project URL (optional)
+
+**Example:**
+
+```json
+{
+  "key": "DBSAN",
+  "name": "Dashboard Sandoz",
+  "project_type_key": "software",
+  "project_template_key": "com.pyxis.greenhopper.jira:gh-simplified-scrum-classic",
+  "description": "QA tracking for the Sandoz Dashboard KPIs/widgets"
+}
+```
+
+### create-issue-type
+
+Creates a new global issue type (e.g. a custom "Indicador" type). **Requires "Administer Jira" global permission.** The issue type is created instance-wide; use `create-issuetype-scheme` to make it available on a specific project.
+
+**Parameters:**
+
+- `name`: Issue type name (required)
+- `description`: Issue type description (optional)
+- `type`: `standard` or `subtask` (optional, defaults to `standard`)
+
+**Example:**
+
+```json
+{
+  "name": "Indicador",
+  "description": "A single KPI/widget tracked on a dashboard",
+  "type": "standard"
+}
+```
+
+### create-issuetype-scheme
+
+Creates an issue type scheme — a named set of issue types that can be assigned to a project. **Requires "Administer Jira" global permission; Jira Cloud company-managed projects only.** Use `create-issue-type` first to get issue type IDs, or look up existing ones via the Jira UI.
+
+**Parameters:**
+
+- `name`: Scheme name (required)
+- `description`: Scheme description (optional)
+- `issue_type_ids`: Array of issue type IDs to include (required, at least one)
+- `default_issue_type_id`: Default issue type ID, must be one of `issue_type_ids` (optional)
+
+**Example:**
+
+```json
+{
+  "name": "Dashboard Sandoz Scheme",
+  "issue_type_ids": ["10100", "10001", "10002", "10004"],
+  "default_issue_type_id": "10100"
+}
+```
+
+### assign-issuetype-scheme
+
+Assigns (replaces) the issue type scheme for a project. **Requires "Administer Jira" global permission; Jira Cloud company-managed projects only.** Fails if the project has issues using types not present in the new scheme.
+
+**Parameters:**
+
+- `issue_type_scheme_id`: The issue type scheme ID to assign (required)
+- `project_key_or_id`: The target project's key or numeric ID (required)
+
+**Example:**
+
+```json
+{
+  "issue_type_scheme_id": "10005",
+  "project_key_or_id": "DBSAN"
+}
+```
 
 
 ## Project Architecture
