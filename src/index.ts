@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -11,7 +12,11 @@ const envPath = path.resolve(__dirname, "..", ".env");
 console.error(`[JIRA-MCP] Loading .env from: ${envPath}`);
 const result = dotenv.config({ path: envPath });
 if (result.error) {
-  console.error(`[JIRA-MCP] Error loading .env:`, result.error);
+  if ((result.error as NodeJS.ErrnoException).code === "ENOENT") {
+    console.error(`[JIRA-MCP] No .env file found at: ${envPath} (using environment variables)`);
+  } else {
+    console.error(`[JIRA-MCP] Error loading .env:`, result.error);
+  }
 } else {
   console.error(`[JIRA-MCP] .env loaded successfully`);
 }
