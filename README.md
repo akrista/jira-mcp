@@ -1,6 +1,8 @@
 # JIRA MCP Integration
 
-[![MIT License](https://img.shields.io/npm/l/jira-mcp)](LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+> **Fork notice:** this is a fork of [MankowskiNick/jira-mcp](https://github.com/MankowskiNick/jira-mcp), fully rewritten in Rust (originally Node.js/TypeScript). Same 18 tools, same environment variables, same tool names — now a single binary installable with `cargo install`.
 
 A [Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) server for integrating JIRA with AI assistants. This tool allows Claude to create JIRA tickets directly within your conversations.
 
@@ -33,8 +35,15 @@ The JIRA MCP project is a Rust application that provides a Model Context Protoco
   - [create-ticket](#create-ticket)
   - [get-ticket](#get-ticket)
   - [search-tickets](#search-tickets)
+  - [search-tickets-jql](#search-tickets-jql)
   - [update-ticket](#update-ticket)
   - [link-tickets](#link-tickets)
+  - [add-comment](#add-comment)
+  - [list-comments](#list-comments)
+  - [transition-ticket](#transition-ticket)
+  - [assign-ticket](#assign-ticket)
+  - [add-watcher](#add-watcher)
+  - [remove-watcher](#remove-watcher)
   - [get-test-steps](#get-test-steps)
   - [add-test-steps](#add-test-steps)
   - [create-project](#create-project)
@@ -46,24 +55,20 @@ The JIRA MCP project is a Rust application that provides a Model Context Protoco
 - [Authentication](#authentication)
 - [Data Formatting](#data-formatting)
 - [Error Handling](#error-handling)
-- [Usage with Claude](#usage-with-claude)- [Getting a JIRA API Token](#getting-a-jira-api-token)
+- [Usage with Claude](#usage-with-claude)
+- [Getting a JIRA API Token](#getting-a-jira-api-token)
 - [Troubleshooting](#troubleshooting)
 
 ## Features
 
 - Create JIRA tickets with summary, description, acceptance criteria, and issue type
 - Search JIRA tickets using flexible JQL queries or by issue type
-- Assign story points to Story tickets
-- Automatically create linked Test tickets for Stories with points
-- Enhanced error handling with automatic retry for custom field validation issues
-- Updated to use latest JIRA REST API v3 specification (CHANGE-2046 compliant)
-- Search for JIRA tickets by issue type and additional criteria
-- Update existing JIRA tickets with new field values
-- Link JIRA tickets together with specified relationship types
+- Update tickets, manage comments, transitions, assignees and watchers
+- Assign story points to Story tickets and automatically create linked Test tickets for them
 - Retrieve and add test steps for Zephyr test tickets
 - Create JIRA projects, custom global issue types, and issue type schemes (admin permissions required)
-- Seamless integration with Claude desktop application
-- Simple configuration using Claude's desktop configuration file
+- Automatic retry for custom field validation issues
+- Single static binary — no Node.js, no npm, distributed via `cargo install`, `cargo binstall` or GitHub release archives (Linux x64/ARM64, macOS x64/ARM64, Windows)
 
 ## Installation
 
@@ -72,6 +77,14 @@ Requires Rust (https://rustup.rs). Then install the binary:
 ```
 cargo install --git https://github.com/akrista/jira-mcp
 ```
+
+Or, if you have [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), use the prebuilt release binaries:
+
+```
+cargo binstall jira-mcp
+```
+
+Prebuilt archives and checksums are also available on the [Releases page](https://github.com/akrista/jira-mcp/releases).
 
 Or build locally and point your config at `target/release/jira-mcp`:
 
@@ -96,6 +109,21 @@ Add the JIRA MCP server configuration to your Claude configuration file:
 
 - **VSCode Extension**:
   - `~/.vscode-server/data/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+
+- **[maga](https://github.com/akrista/maga)** (MCP manager):
+  - add the server to `~/.config/maga/mcp.toml` and let maga sync it to your harnesses:
+
+    ```toml
+    [mcps.jira-mcp]
+    transport = "stdio"
+    command = "jira-mcp"
+
+    [mcps.jira-mcp.env]
+    JIRA_HOST = "your-site.atlassian.net"
+    JIRA_USERNAME = "your-email@example.com"
+    JIRA_API_TOKEN = "your_api_token"
+    JIRA_PROJECT_KEY = "your_project_key"
+    ```
 
 ### Configuration Template
 
@@ -314,6 +342,24 @@ Searches for JIRA tickets by issue type and additional criteria.
 
 This tool allows you to find all tickets of a specific type in your JIRA project. You can further refine your search by providing additional JQL criteria.
 
+### search-tickets-jql
+
+Searches for JIRA tickets using custom JQL (JIRA Query Language) queries.
+
+**Parameters:**
+
+- `jql`: The JQL query to execute (required) - any valid JIRA Query Language expression
+- `max_results`: Maximum number of results to return (optional, default: 10, max: 50)
+
+**Examples:**
+
+- Search for a specific ticket: `key = "PROJ-123"`
+- Search by project and status: `project = "MYPROJECT" AND status = "In Progress"`
+- Search by assignee: `assignee = "john.doe@company.com"`
+- Search by multiple criteria: `project = "PROJ" AND issuetype = "Bug" AND priority = "High"`
+
+This tool provides full flexibility for searching JIRA tickets using any valid JQL query. It uses the updated `/rest/api/3/search/jql` endpoint for optimal compatibility with current JIRA Cloud instances.
+
 ### update-ticket
 
 Updates an existing JIRA ticket with new field values.
@@ -496,6 +542,63 @@ Assigns (replaces) the issue type scheme for a project. **Requires "Administer J
 }
 ```
 
+### add-comment
+
+Adds a comment to a JIRA ticket.
+
+**Parameters:**
+
+- `ticket_key`: The key of the ticket (required, e.g., "PROJ-123")
+- `comment`: The comment text (required) — stored in Jira's Atlassian Document Format
+
+### list-comments
+
+Lists comments on a JIRA ticket, rendered as plain text.
+
+**Parameters:**
+
+- `ticket_key`: The key of the ticket (required)
+- `max_results`: Maximum number of comments to return (optional, default: 20, max: 100)
+
+### transition-ticket
+
+Transitions a JIRA ticket to a different status, optionally with a comment.
+
+**Parameters:**
+
+- `ticket_key`: The key of the ticket (required)
+- `transition_name`: Transition name, e.g. "Done", "In Progress" (optional — use if unambiguous)
+- `transition_id`: Transition ID (optional — use if the name is ambiguous)
+- `list_transitions`: Set `true` to list available transitions instead of transitioning (optional)
+- `comment`: Comment to add during the transition (optional)
+
+### assign-ticket
+
+Assigns or unassigns a JIRA ticket.
+
+**Parameters:**
+
+- `ticket_key`: The key of the ticket (required)
+- `account_id`: Atlassian accountId to assign to (optional — omit to unassign)
+
+### add-watcher
+
+Adds a watcher to a JIRA ticket.
+
+**Parameters:**
+
+- `ticket_key`: The key of the ticket (required)
+- `account_id`: Atlassian accountId of the watcher (required)
+
+### remove-watcher
+
+Removes a watcher from a JIRA ticket.
+
+**Parameters:**
+
+- `ticket_key`: The key of the ticket (required)
+- `account_id`: Atlassian accountId of the watcher (required)
+
 
 ## Project Architecture
 
@@ -520,24 +623,6 @@ jira-mcp/
 
 The application builds an MCP server using the official Rust SDK (`rmcp` crate). Each tool is an async method annotated with `#[tool]`; the macro generates the JSON schemas, the tool router, and the server info. The server speaks stdio JSON-RPC.
 
-### search-tickets-jql
-
-Searches for JIRA tickets using custom JQL (JIRA Query Language) queries.
-
-**Parameters:**
-
-- `jql`: The JQL query to execute (required) - any valid JIRA Query Language expression
-- `max_results`: Maximum number of results to return (optional, default: 10, max: 50)
-
-**Examples:**
-
-- Search for a specific ticket: `key = "PROJ-123"`
-- Search by project and status: `project = "MYPROJECT" AND status = "In Progress"`
-- Search by assignee: `assignee = "john.doe@company.com"`
-- Search by multiple criteria: `project = "PROJ" AND issuetype = "Bug" AND priority = "High"`
-
-This tool provides full flexibility for searching JIRA tickets using any valid JQL query. It uses the updated `/rest/api/3/search/jql` endpoint for optimal compatibility with current JIRA Cloud instances.
-
 ### JIRA Integration
 
 The JIRA integration module provides tools for interacting with the JIRA REST API:
@@ -545,8 +630,10 @@ The JIRA integration module provides tools for interacting with the JIRA REST AP
 1. **create-ticket**: Creates a new JIRA ticket with customizable fields
 2. **link-tickets**: Links two JIRA tickets together with a specified relationship
 3. **get-ticket**: Retrieves information about a specific JIRA ticket
-4. **search-tickets**: Searches for JIRA tickets using JQL (JIRA Query Language)
+4. **search-tickets** / **search-tickets-jql**: Searches for JIRA tickets by type or arbitrary JQL
 5. **update-ticket**: Updates an existing JIRA ticket with new information
+6. **add-comment** / **list-comments**: Comment management
+7. **transition-ticket**, **assign-ticket**, **add-watcher**, **remove-watcher**: Workflow and collaboration
 
 The module uses Basic Authentication with the JIRA API and formats content according to JIRA's Atlassian Document Format (ADF).
 
