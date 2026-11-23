@@ -1,0 +1,38 @@
+[package]
+name = "jira-mcp"
+version = "1.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "JIRA MCP Integration (Model Context Protocol server for Jira + Zephyr)"
+repository = "https://github.com/akrista/jira-mcp"
+readme = "README.md"
+license = "MIT"
+keywords = ["mcp", "jira", "zephyr", "claude", "ai"]
+categories = ["command-line-utilities", "development-tools"]
+include = ["/src/**/*", "/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE"]
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[dependencies]
+rmcp = { version = "3.11", features = ["server", "transport-io", "macros"] }
+schemars = "1.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+jsonwebtoken = "9"
+sha2 = "0.10"
+base64 = "0.22"
+urlencoding = "2"
+dotenvy = "0.15"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1

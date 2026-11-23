@@ -1,13 +1,12 @@
 # JIRA MCP Integration
 
-[![Certified by MCP Hub](https://img.shields.io/badge/Certified-MCP%20Hub-blue)](https://mcphub.com/mcp-servers/mankowskinick/jira-mcp)
 [![MIT License](https://img.shields.io/npm/l/jira-mcp)](LICENSE)
 
-A [Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) server for integrating JIRA with Claude. This tool allows Claude to create JIRA tickets directly within your conversations.
+A [Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) server for integrating JIRA with AI assistants. This tool allows Claude to create JIRA tickets directly within your conversations.
 
 ## Overview
 
-The JIRA MCP project is a Node.js/TypeScript application that provides a Model Context Protocol (MCP) server for integrating with JIRA and Zephyr. It allows AI assistants to interact with JIRA for project management and Zephyr for test management through a standardized protocol.
+The JIRA MCP project is a Rust application that provides a Model Context Protocol (MCP) server for integrating with JIRA and Zephyr. It allows AI assistants to interact with JIRA for project management and Zephyr for test management through a standardized protocol. It is distributed as a single static binary — install it with `cargo install`.
 
 <img width="772" alt="grafik" src="https://github.com/user-attachments/assets/a6f9afd8-7f75-4316-9421-ee7126002d2b" />
 <img width="1188" alt="grafik" src="https://github.com/user-attachments/assets/b8f089ac-4443-4a64-91c0-87b97175d9dd" />
@@ -47,10 +46,7 @@ The JIRA MCP project is a Node.js/TypeScript application that provides a Model C
 - [Authentication](#authentication)
 - [Data Formatting](#data-formatting)
 - [Error Handling](#error-handling)
-- [Utility Scripts](#utility-scripts)
-  - [update-mcp-settings.js](#update-mcp-settingsjs)
-- [Usage with Claude](#usage-with-claude)
-- [Getting a JIRA API Token](#getting-a-jira-api-token)
+- [Usage with Claude](#usage-with-claude)- [Getting a JIRA API Token](#getting-a-jira-api-token)
 - [Troubleshooting](#troubleshooting)
 
 ## Features
@@ -71,25 +67,21 @@ The JIRA MCP project is a Node.js/TypeScript application that provides a Model C
 
 ## Installation
 
-1. Clone the repository:
+Requires Rust (https://rustup.rs). Then install the binary:
 
-   ```
-   git clone https://github.com/MankowskiNick/jira-mcp.git
-   cd jira-mcp
-   ```
+```
+cargo install --git https://github.com/akrista/jira-mcp
+```
 
-2. Install dependencies:
+Or build locally and point your config at `target/release/jira-mcp`:
 
-   ```
-   npm install
-   ```
+```
+git clone https://github.com/akrista/jira-mcp.git
+cd jira-mcp
+cargo build --release
+```
 
-3. Build the project:
-   ```
-    npm run build -- on unix systems
-    -- or --
-    npm run build-win -- on windows systems
-   ```
+Run tests with `cargo test`.
 
 ## Configuration
 
@@ -117,8 +109,7 @@ Add the following configuration to your Claude configuration file:
 {
   "mcpServers": {
     "jira-mcp": {
-      "command": "node",
-      "args": ["/path/to/project/build/index.js"],
+      "command": "jira-mcp",
       "env": {
         "JIRA_HOST": "your-site.atlassian.net",
         "JIRA_USERNAME": "your-email@example.com",
@@ -145,6 +136,8 @@ Add the following configuration to your Claude configuration file:
   }
 }
 ```
+
+If you prefer a `.env` file next to the binary (same variables as above), run the server with the working directory containing the `.env` — the server loads it at startup.
 
 ### Required Configuration
 
@@ -211,8 +204,7 @@ If you want the absolute minimal configuration, you can use:
 {
   "mcpServers": {
     "jira-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/jira-mcp/build/index.js"],
+      "command": "jira-mcp",
       "env": {
         "JIRA_HOST": "your-site.atlassian.net",
         "JIRA_USERNAME": "your-email@example.com",
@@ -511,48 +503,22 @@ The project follows a modular architecture with clear separation of concerns:
 
 ```
 jira-mcp/
-├── src/                      # Source code
-│   ├── index.ts              # Main entry point
-│   ├── utils.ts              # Shared utility functions
-│   ├── jira/                 # JIRA integration module
-│   │   ├── api.ts            # JIRA API interaction functions
-│   │   ├── formatting.ts     # JIRA content formatting utilities
-│   │   ├── index.ts          # JIRA module exports
-│   │   ├── tools.ts          # JIRA MCP tools registration
-│   │   └── types.ts          # JIRA type definitions
-│   └── zephyr/               # Zephyr integration module
-│       ├── auth.ts           # Zephyr authentication utilities
-│       ├── index.ts          # Zephyr module exports
-│       ├── test-steps.ts     # Zephyr test steps API functions
-│       ├── tools.ts          # Zephyr MCP tools registration
-│       └── types.ts          # Zephyr type definitions
-├── util/                     # Utility scripts
-│   └── update-mcp-settings.js # Script to update MCP settings
-├── package.json              # Project metadata and dependencies
-└── tsconfig.json             # TypeScript configuration
+├── src/
+│   ├── main.rs        # Entry point: .env loading, stdio transport
+│   ├── tools.rs       # MCP tool definitions (18 tools)
+│   ├── jira.rs        # JIRA REST API v3 client
+│   ├── zephyr.rs      # Zephyr (ZAPI) JWT auth + test step API
+│   ├── adf.rs         # Atlassian Document Format builders/extraction
+│   └── config.rs      # Environment configuration
+├── Cargo.toml         # Rust package manifest
+└── jira-mcp-config-template.json
 ```
 
 ## Core Components
 
 ### MCP Server
 
-The application creates an MCP server using the `@modelcontextprotocol/sdk` package. This server exposes tools that can be used by AI assistants to interact with JIRA and Zephyr.
-
-```typescript
-// src/index.ts
-const server = new McpServer({
-  name: "jira-mcp",
-  version: "1.0.0",
-});
-
-// Register tools
-registerJiraTools(server);
-registerZephyrTools(server);
-
-// Connect using stdio transport
-const transport = new StdioServerTransport();
-await server.connect(transport);
-```
+The application builds an MCP server using the official Rust SDK (`rmcp` crate). Each tool is an async method annotated with `#[tool]`; the macro generates the JSON schemas, the tool router, and the server info. The server speaks stdio JSON-RPC.
 
 ### search-tickets-jql
 
@@ -600,19 +566,18 @@ The module uses JWT authentication with the Zephyr API, generating signed tokens
 
 JIRA authentication uses Basic Auth with a username and API token:
 
-```typescript
-const auth = Buffer.from(
-  `${process.env.JIRA_USERNAME}:${process.env.JIRA_API_TOKEN}`
-).toString("base64");
+```rust
+// Precomputed at startup: base64(username:api_token)
+Authorization: Basic <base64(JIRA_USERNAME:JIRA_API_TOKEN)>
 ```
 
 ### Zephyr Authentication
 
 Zephyr authentication uses JWT tokens generated with a specific algorithm:
 
-```typescript
+```rust
 // Generate JWT for Zephyr API
-const jwtToken = generateZephyrJwt("GET", apiPath, queryParams);
+let jwt = generate_zephyr_jwt(cfg, "GET", &api_path, &[("projectId", project_id)])?;
 ```
 
 The JWT generation includes:
@@ -638,34 +603,6 @@ The application includes comprehensive error handling throughout:
 - Error messages are extracted from API responses when available
 - Exceptions are caught and logged
 - Error information is returned to the client in a consistent format
-
-## Utility Scripts
-
-The project includes utility scripts in the `util` directory that help with configuration and setup tasks.
-
-### update-mcp-settings.js
-
-This script automates the process of updating the Claude VSCode extension's MCP settings with the JIRA MCP configuration.
-
-**Purpose:**
-- Reads a merged JIRA MCP configuration file from the util directory
-- Updates the Claude VSCode extension's MCP settings file with the JIRA MCP configuration
-- Handles and fixes JSON parsing issues that might occur in the settings file
-- Streamlines the configuration process for VSCode extension users
-
-**Usage:**
-```bash
-node util/update-mcp-settings.js
-```
-
-**When to use:**
-- After making changes to your JIRA MCP configuration
-- When setting up the JIRA MCP integration with the Claude VSCode extension
-- If you encounter issues with the VSCode extension's MCP settings
-
-The script expects a file named `merged-jira-mcp-config.json` in the util directory, which should contain your complete JIRA MCP configuration. It will then update the VSCode extension's settings file located at `/home/joe/.vscode-server/data/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`.
-
-**Note:** You may need to modify the script to match your specific file paths if they differ from the defaults.
 
 ## Usage with Claude
 
@@ -719,6 +656,6 @@ This MCP is fully prepared for these changes and will continue working seamlessl
 If you encounter issues:
 
 1. Check that your JIRA credentials are correct
-2. Verify the path to the project's index.js file in your configuration
+2. Verify the path to the `jira-mcp` binary in your configuration
 3. Make sure you've given Claude permission to use tools
 4. Check Claude's console logs for any error messages related to the JIRA MCP server
